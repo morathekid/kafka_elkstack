@@ -1,0 +1,70 @@
+version: '2.2'
+services:
+  elas:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.8.8
+    container_name: elas
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - data01:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    networks:
+      - elastic
+
+  kiba:
+    image: docker.elastic.co/kibana/kibana:6.8.8
+    container_name: kiba
+    ports:
+      - 5601:5601
+    environment:
+      ELASTICSEARCH_URL: http://elas:9200
+      ELASTICSEARCH_HOSTS: http://elas:9200
+    networks:
+      - elastic    
+
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    ports:
+      - "2181:2181"
+    container_name: zookeeper
+
+  kafka:
+    image: wurstmeister/kafka:0.11.0.1
+    ports:
+      - "9092:9092"
+    environment:
+      # The below only works for a macOS environment if you installed Docker for
+      # Mac. If your Docker engine is using another platform/OS, please refer to
+      # the relevant documentation with regards to finding the Host IP address
+      # for your platform.
+      KAFKA_ADVERTISED_HOST_NAME: localhost
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CREATE_TOPICS: "logstash_logs:1:1"
+    links:
+      - zookeeper
+    depends_on:
+      - zookeeper
+    container_name: kafka
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:6.8.8
+    container_name: logstash
+    network_mode: "host"
+    volumes:
+      - ./logstash-config/config/logstash.yml:/usr/share/logstash/config/logstash.yml
+      - ./logstash-config/pipeline:/usr/share/logstash/pipeline
+
+volumes:
+  data01:
+    driver: local
+
+networks:
+  elastic:
+    driver: bridge
